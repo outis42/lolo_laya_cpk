@@ -12730,11 +12730,10 @@ var Loader=(function(_super){
 		if (type==="ttf")return this._loadTTF(url);
 
         //cocos runtime 文件系统适配
-		if (window.jsb) {
+		if (window.jsb && url.startsWith('file://')) {
 			setTimeout( ()=> {
-				if (url.startsWith('file://')) {
-					url = url.substr('file://'.length);
-				}
+				url = url.substr('file://'.length);
+				
 				var response;
 				if (type == 'pkm' || type == 'arraybuffer') {
 					response = jsb.fileUtils.getDataFromFile(url);
