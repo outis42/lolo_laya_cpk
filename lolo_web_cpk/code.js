@@ -4981,6 +4981,16 @@ var SoundManager=(function(){
 		return channel;
 	}
 
+	//cocos runtime 适配音频播放
+	var layaSoundManagerPlaySound = SoundManager.playSound;
+	SoundManager.playSound = function(url, loops, complete, soundClass, startTime) {
+		if (window.jsb) {
+            loadRuntime().AudioEngine.play(url, loops, 100);
+		} else {
+            layaSoundManagerPlaySound(url, loops, complete, soundClass, startTime);
+		}
+	}
+
 	SoundManager.destroySound=function(url){
 		var tSound=Laya.loader.getRes(url);
 		if (tSound){
@@ -4996,6 +5006,16 @@ var SoundManager=(function(){
 		SoundManager._tMusic=url;
 		if (SoundManager._musicChannel)SoundManager._musicChannel.stop();
 		return SoundManager._musicChannel=SoundManager.playSound(url,loops,complete,SoundManager._musicClass,startTime);
+	}
+
+	//cocos runtime 适配音频播放
+	var layaSoundManagerPlayMusic = SoundManager.playMusic;
+	SoundManager.playMusic = function(url, loop, complete, startTime) {
+		if (window.jsb) {
+			loadRuntime().AudioEngine.play(url, true, 100);
+		} else {
+			layaSoundManagerPlayMusic(url, loop, complete, startTime);
+		}
 	}
 
 	SoundManager.stopSound=function(url){
@@ -5020,6 +5040,17 @@ var SoundManager=(function(){
 		}
 	}
 
+	//cocos runtime 适配音频播放
+	var layaSoundManagerStopAll = SoundManager.stopAll;
+	SoundManager.stopAll = function() {
+		if (window.jsb) {
+            loadRuntime().AudioEngine.stopAll();
+		} else {
+			layaSoundManagerStopAll();
+		}
+	}
+
+
 	SoundManager.stopAllSound=function(){
 		var i=0;
 		var channel;
@@ -5034,6 +5065,16 @@ var SoundManager=(function(){
 	SoundManager.stopMusic=function(){
 		if (SoundManager._musicChannel)SoundManager._musicChannel.stop();
 		SoundManager._tMusic=null;
+	}
+
+	//cocos runtime 适配音频播放
+	var layaSoundManagerStopMusic = SoundManager.stopMusic;
+	SoundManager.stopMusic = function() {
+		if (window.jsb) {
+            loadRuntime().AudioEngine.stopAll();
+		} else {
+            layaSoundManagerStopMusic();
+		}
 	}
 
 	SoundManager.setSoundVolume=function(volume,url){
@@ -5380,6 +5421,8 @@ var URL=(function(){
 		} else if (char1 === "/") {
 			return url;
 		}
+
+		//cocos runtime 文件系统适配
 		if (window.jsb) {
 			return (base || "file://") + url;
 		} else {
@@ -12692,6 +12735,8 @@ var Loader=(function(_super){
 		// 		return;
 		// 	}
 		// }
+
+		//cocos runtime 文件系统适配
 		if (window.jsb) {
 			setTimeout(() => {
 				if (url.startsWith('file://'))
@@ -18469,7 +18514,12 @@ var Stage=(function(_super){
 				realHeight=this.designHeight;
 				break ;
 			case "showall":
-				scaleX=scaleY=Math.min(scaleX,scaleY);
+			    //cocos runtime 屏幕适配
+			    if (window.jsb) {
+			    	
+			    } else {
+			    	scaleX=scaleY=Math.min(scaleX,scaleY);
+			    }
 				canvasWidth=realWidth=Math.round(this.designWidth *scaleX);
 				canvasHeight=realHeight=Math.round(this.designHeight *scaleY);
 				break ;
@@ -54186,14 +54236,16 @@ Laya.MiniAdpter.init()
 Laya.init(BG_WIDTH, BG_HEIGHT, Laya.WebGL);
 //FPS
 // Laya.Stat.show(0, 0);
+
 //设置适配模式
-Laya.stage.scaleMode = "exactfit";
+Laya.stage.scaleMode = Laya.Stage.SCALE_SHOWALL;
 //设置居中对齐
 Laya.stage.alignH = "center";
+//设置居中对齐
+Laya.stage.alignW = "middle";
 //设置横屏
-Laya.stage.screenMode = "none";
-//设置分辨率
-Laya.stage.scaleMode = "showall";
+Laya.stage.screenMode = Laya.Stage.SCREEN_HORIZONTAL;
+
 
 //loading
 var loading = new Loading();    
