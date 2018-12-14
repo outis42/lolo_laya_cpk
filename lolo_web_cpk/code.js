@@ -12701,83 +12701,79 @@ var Loader=(function(_super){
 	*@param group (default=null)分组名称。
 	*@param ignoreCache (default=false)是否忽略缓存，强制重新加载。
 	*/
-	__proto.load = function (url, type, cache, group, ignoreCache) {
-		(cache === void 0) && (cache = true);
-		(ignoreCache === void 0) && (ignoreCache = false);
-		this._url = url;
-		if (url.indexOf("data:image") === 0) this._type = type = "image";
+	__proto.load=function(url,type,cache,group,ignoreCache){
+		(cache===void 0)&& (cache=true);
+		(ignoreCache===void 0)&& (ignoreCache=false);
+		this._url=url;
+		if (url.indexOf("data:image")===0)this._type=type="image";
 		else {
-			this._type = type || (type = this.getTypeFromUrl(url));
-			url = URL.formatURL(url);
+			this._type=type || (type=this.getTypeFromUrl(url));
+			url=URL.formatURL(url);
 		}
-		this._cache = cache;
-		this._data = null;
-		if (!ignoreCache && Loader.loadedMap[url]) {
-			this._data = Loader.loadedMap[url];
-			this.event(/*laya.events.Event.PROGRESS*/"progress", 1);
-			this.event(/*laya.events.Event.COMPLETE*/"complete", this._data);
+		this._cache=cache;
+		this._data=null;
+		if (!ignoreCache && Loader.loadedMap[url]){
+			this._data=Loader.loadedMap[url];
+			this.event(/*laya.events.Event.PROGRESS*/"progress",1);
+			this.event(/*laya.events.Event.COMPLETE*/"complete",this._data);
 			return;
 		}
-		if (group) Loader.setGroup(url, group);
-		if (Loader.parserMap[type] != null) {
-			this._customParse = true;
-			if (((Loader.parserMap[type]) instanceof laya.utils.Handler)) Loader.parserMap[type].runWith(this);
-			else Loader.parserMap[type].call(null, this);
+		if (group)Loader.setGroup(url,group);
+		if (Loader.parserMap[type] !=null){
+			this._customParse=true;
+			if (((Loader.parserMap[type])instanceof laya.utils.Handler ))Loader.parserMap[type].runWith(this);
+			else Loader.parserMap[type].call(null,this);
 			return;
 		}
-		if (type === "image" || type === "htmlimage" || type === "nativeimage") return this._loadImage(url);
-		if (type === "sound") return this._loadSound(url);
-		if (type === "ttf") return this._loadTTF(url);
-		// if (type == "atlas") {
-		// 	if (Loader.preLoadedAtlasConfigMap[url]) {
-		// 		this.onLoaded(Loader.preLoadedAtlasConfigMap[url]);
-		// 		delete Loader.preLoadedAtlasConfigMap[url];
-		// 		return;
-		// 	}
-		// }
+		if (type==="image" || type==="htmlimage" || type==="nativeimage")return this._loadImage(url);
+		if (type==="sound")return this._loadSound(url);
+		if (type==="ttf")return this._loadTTF(url);
 
-		//cocos runtime 文件系统适配
+        //cocos runtime 文件系统适配
 		if (window.jsb) {
-			setTimeout(() => {
-				if (url.startsWith('file://'))
+			setTimeout( ()=> {
+				if (url.startsWith('file://')) {
 					url = url.substr('file://'.length);
+				}
 				var response;
 				if (type == 'pkm' || type == 'arraybuffer') {
 					response = jsb.fileUtils.getDataFromFile(url);
-				}
-				else {
+				} else {
 					response = jsb.fileUtils.getStringFromFile(url);
 					if (type == 'atlas' || type == 'json') {
 						response = JSON.parse(response);
 					}
 				}
-
 				this.onLoaded(response);
-
 			}, 0);
-		}
-		else {
-			if (!this._http) {
-				this._http = new HttpRequest();
-				this._http.on(/*laya.events.Event.PROGRESS*/"progress", this, this.onProgress);
-				this._http.on(/*laya.events.Event.ERROR*/"error", this, this.onError);
-				this._http.on(/*laya.events.Event.COMPLETE*/"complete", this, this.onLoaded);
-			};
+
+		} else {
 			var contentType;
-			switch (type) {
+			switch (type){
 				case "atlas":
-					contentType = "json";
-					break;
+				case "plf":
+					contentType="json";
+					break ;
 				case "font":
-					contentType = "xml";
-					break;
+					contentType="xml";
+					break ;
 				case "pkm":
-					contentType = "arraybuffer";
+					contentType="arraybuffer";
 					break
-				default:
-					contentType = type;
+				default :
+					contentType=type;
+				}
+			if (Loader.preLoadedMap[url]){
+				this.onLoaded(Loader.preLoadedMap[url]);
+				}else{
+				if (!this._http){
+					this._http=new HttpRequest();
+					this._http.on(/*laya.events.Event.PROGRESS*/"progress",this,this.onProgress);
+					this._http.on(/*laya.events.Event.ERROR*/"error",this,this.onError);
+					this._http.on(/*laya.events.Event.COMPLETE*/"complete",this,this.onLoaded);
+				}
+				this._http.send(url,null,"get",contentType);
 			}
-			this._http.send(url, null, "get", contentType);
 		}
 	}
 
