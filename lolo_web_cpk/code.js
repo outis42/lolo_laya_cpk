@@ -5381,9 +5381,9 @@ var URL=(function(){
 			return url;
 		}
 		if (window.jsb) {
-			return (base || URL.basePath) + url;
-		} else {
 			return (base || "file://") + url;
+		} else {
+			return (base || URL.basePath) + url;
 		}
 	}
 
@@ -12685,13 +12685,13 @@ var Loader=(function(_super){
 		if (type === "image" || type === "htmlimage" || type === "nativeimage") return this._loadImage(url);
 		if (type === "sound") return this._loadSound(url);
 		if (type === "ttf") return this._loadTTF(url);
-		if (type == "atlas") {
-			if (Loader.preLoadedAtlasConfigMap[url]) {
-				this.onLoaded(Loader.preLoadedAtlasConfigMap[url]);
-				delete Loader.preLoadedAtlasConfigMap[url];
-				return;
-			}
-		}
+		// if (type == "atlas") {
+		// 	if (Loader.preLoadedAtlasConfigMap[url]) {
+		// 		this.onLoaded(Loader.preLoadedAtlasConfigMap[url]);
+		// 		delete Loader.preLoadedAtlasConfigMap[url];
+		// 		return;
+		// 	}
+		// }
 		if (window.jsb) {
 			setTimeout(() => {
 				if (url.startsWith('file://'))
