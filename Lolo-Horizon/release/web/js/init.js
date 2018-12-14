@@ -1,4 +1,6 @@
 /*这里面只用于laya引擎初始化和图片加载功能 其他不管 */
+Laya.MiniAdpter.init()
+
 //laya初始化
 Laya.init(BG_WIDTH, BG_HEIGHT, Laya.WebGL);
 //FPS
