@@ -1,3 +1,7 @@
+
+var audioEngine;
+var rt = loadRuntime();
+
 /**
 *<code>SoundManager</code> 是一个声音管理类。提供了对背景音乐、音效的播放控制方法。
 *引擎默认有两套声音方案：WebAudio和H5Audio
@@ -8,8 +12,13 @@
 */
 //class laya.media.SoundManager
 var SoundManager=(function(){
+
+    audioEngine = rt.AudioEngine;
+
 	function SoundManager(){}
 	__class(SoundManager,'laya.media.SoundManager');
+
+	// 这个属性似乎没有使用，因为SoundManager._musicClass没有被使用
 	__getset(1,SoundManager,'useAudioMusic',function(){
 		return SoundManager._useAudioMusic;
 		},function(value){
@@ -65,21 +74,21 @@ var SoundManager=(function(){
 		},function(value){
 		if (value==SoundManager._musicMuted)return;
 		if (value){
-			if (SoundManager._tMusic){
-				if (SoundManager._musicChannel&&!SoundManager._musicChannel.isStopped){
-					SoundManager._musicChannel.pause();
-					}else{
+			if (SoundManager._tMusic && SoundManager._musicChannel){
+				if (audioEngine.getState(SoundManager._musicChannel == audioEngine.AudioState.PLAYING){
+					audioEngine.pause(SoundManager._musicChannel);
+				}else{
 					SoundManager._musicChannel=null;
 				}
-				}else{
+			}else{
 				SoundManager._musicChannel=null;
 			}
 			SoundManager._musicMuted=value;
-			}else {
+		}else {
 			SoundManager._musicMuted=value;
 			if (SoundManager._tMusic){
 				if (SoundManager._musicChannel){
-					SoundManager._musicChannel.resume();
+					audioEngine.resume(SoundManager._musicChannel);
 				}
 			}
 		}
@@ -94,6 +103,7 @@ var SoundManager=(function(){
 		SoundManager._soundMuted=value;
 	});
 
+    // 原本的channel代表一个可以播放的声音对象，现在的channel只是一个audioId
 	SoundManager.addChannel=function(channel){
 		if (SoundManager._channels.indexOf(channel)>=0)return;
 		SoundManager._channels.push(channel);
@@ -108,11 +118,15 @@ var SoundManager=(function(){
 		}
 	}
 
+    // 用于清理不再使用的声音资源
 	SoundManager.disposeSoundIfNotUsed=function(url){
-		var i=0;
-		for (i=SoundManager._channels.length-1;i >=0;i--){
-			if (SoundManager._channels[i].url==url){
-				return;
+		url=URL.formatURL(url);
+		if (SoundManager._url2channel.has(url)) {
+			var channel = SoundManager._url2channel.get(url);
+			for (i=SoundManager._channels.length-1;i >=0;i--){
+				if (SoundManager._channels[i]==channel){
+					return;
+				}
 			}
 		}
 		SoundManager.destroySound(url);
@@ -129,78 +143,63 @@ var SoundManager=(function(){
 	SoundManager._stageOnBlur=function(){
 		SoundManager._isActive=false;
 		if (SoundManager._musicChannel){
-			if (!SoundManager._musicChannel.isStopped){
-				SoundManager._blurPaused=true;
-				SoundManager._musicChannel.pause();
-			}
+            var musicState = audioEngine.getState(SoundManager._musicChannel);
+            if (musicState == audioEngine.AudioState.PLAYING) {
+            	SoundManager._blurPaused=true;
+            	audioEngine.pause(SoundManager._musicChannel);
+            }
 		}
 		SoundManager.stopAllSound();
 		Laya.stage.once(/*laya.events.Event.MOUSE_DOWN*/"mousedown",null,SoundManager._stageOnFocus);
 	}
 
-	SoundManager._recoverWebAudio=function(){
-		if(WebAudioSound.ctx&&WebAudioSound.ctx.state!="running"&&WebAudioSound.ctx.resume)
-			WebAudioSound.ctx.resume();
-	}
-
 	SoundManager._stageOnFocus=function(){
 		SoundManager._isActive=true;
-		SoundManager._recoverWebAudio();
 		Laya.stage.off(/*laya.events.Event.MOUSE_DOWN*/"mousedown",null,SoundManager._stageOnFocus);
 		if (SoundManager._blurPaused){
-			if (SoundManager._musicChannel && SoundManager._musicChannel.isStopped){
-				SoundManager._blurPaused=false;
-				SoundManager._musicChannel.resume();
+			if (SoundManager._musicChannel){
+				var musicState = audioEngine.getState(SoundManager._musicChannel);
+				if (musicState == audioEngine.AudioState.PAUSED) {
+					audioEngine.resume(SoundManager._musicChannel);
+				}
 			}
+			SoundManager._blurPaused=false;
 		}
 	}
 
+    //soundClass 不再需要，使用audioEngine创建播放声音
 	SoundManager.playSound=function(url,loops,complete,soundClass,startTime){
 		(loops===void 0)&& (loops=1);
 		(startTime===void 0)&& (startTime=0);
 		if (!SoundManager._isActive || !url)return null;
 		if (SoundManager._muted)return null;
-		SoundManager._recoverWebAudio();
+		
 		url=URL.formatURL(url);
 		if (url==SoundManager._tMusic){
 			if (SoundManager._musicMuted)return null;
-			}else {
-			if (Render.isConchApp){
-				var ext=Utils.getFileExtension(url);
-				if (ext !="wav" && ext !="ogg"){
-					alert("The sound only supports wav or ogg format,for optimal performance reason,please refer to the official website document.");
-					return null;
-				}
-			}
+		}else {
 			if (SoundManager._soundMuted)return null;
 		};
-		var tSound;
-		if (!Browser.onMiniGame){
-			tSound=Laya.loader.getRes(url);
-		}
-		if (!soundClass)soundClass=SoundManager._soundClass;
-		if (!tSound){
-			tSound=new soundClass();
-			tSound.load(url);
-			if (!Browser.onMiniGame){
-				Loader.cacheRes(url,tSound);
-			}
-		};
+		
+		// 还未实现指定次数的循环播放功能
 		var channel;
-		channel=tSound.play(startTime,loops);
+		var volume=(url==SoundManager._tMusic)? SoundManager.musicVolume :SoundManager.soundVolume;
+		channel=audioEngine.play(url, loops, volume);
+		var success = audioEngine.setCurrentTime(channel, startTime);
+		if (!success) {
+
+		}
 		if (!channel)return null;
-		channel.url=url;
-		channel.volume=(url==SoundManager._tMusic)? SoundManager.musicVolume :SoundManager.soundVolume;
-		channel.completeHandler=complete;
+		audioEngine.setFinishCallback(channel, complete);
+
+        SoundManager._url2channel.set(url, channel);
+
 		return channel;
 	}
 
 	SoundManager.destroySound=function(url){
-		var tSound=Laya.loader.getRes(url);
-		if (tSound){
-			Loader.clearRes(url);
-			tSound.dispose();
-		}
+		//此处应该相当于SoundManager.stopSound，并且回收相关资源。
+		SoundManager.stopSound(url);
 	}
 
 	SoundManager.playMusic=function(url,loops,complete,startTime){
@@ -208,30 +207,37 @@ var SoundManager=(function(){
 		(startTime===void 0)&& (startTime=0);
 		url=URL.formatURL(url);
 		SoundManager._tMusic=url;
-		if (SoundManager._musicChannel)SoundManager._musicChannel.stop();
-		return SoundManager._musicChannel=SoundManager.playSound(url,loops,complete,SoundManager._musicClass,startTime);
+		if (SoundManager._musicChannel) {
+			audioEngine.stop(SoundManager._musicChannel);
+		}
+		SoundManager._musicChannel = SoundManager.playSound(url,loops,complete,0,startTime);
+
+		return SoundManager._musicChannel;
 	}
 
 	SoundManager.stopSound=function(url){
 		url=URL.formatURL(url);
-		var i=0;
-		var channel;
-		for (i=SoundManager._channels.length-1;i >=0;i--){
-			channel=SoundManager._channels[i];
-			if (channel.url==url){
-				channel.stop();
+
+		if (SoundManager._url2channel.has(url)) {
+			var channel = SoundManager._url2channel.get(url);
+			audioEngine.stop(channel);
+
+			//如果停止的是背景音乐的处理
+			if (SoundManager._tMusic == url) {
+				SoundManager._tMusic = null;
+				SoundManager._musicChannel = null;
 			}
+
+			SoundManager._url2channel.delete(url);
 		}
 	}
 
 	SoundManager.stopAll=function(){
-		SoundManager._tMusic=null;
-		var i=0;
-		var channel;
-		for (i=SoundManager._channels.length-1;i >=0;i--){
-			channel=SoundManager._channels[i];
-			channel.stop();
-		}
+		SoundManager._tMusic = null;
+		SoundManager._musicChannel = null;
+        SoundManager._url2channel.clear();
+
+		audioEngine.stopAll();
 	}
 
 
@@ -240,29 +246,32 @@ var SoundManager=(function(){
 		var channel;
 		for (i=SoundManager._channels.length-1;i >=0;i--){
 			channel=SoundManager._channels[i];
-			if (channel.url !=SoundManager._tMusic){
-				channel.stop();
+			if (channel !=SoundManager._musicChannel){
+				audioEngine.stop(channel);
 			}
 		}
 	}
 
 	SoundManager.stopMusic=function(){
-		if (SoundManager._musicChannel)SoundManager._musicChannel.stop();
-		SoundManager._tMusic=null;
+		if (SoundManager._musicChannel){
+            audioEngine.stop(SoundManager._musicChannel);
+		}
+		SoundManager._tMusic = null;
+		SoundManager._musicChannel = null;
 	}
 
 	SoundManager.setSoundVolume=function(volume,url){
 		if (url){
 			url=URL.formatURL(url);
 			SoundManager._setVolume(url,volume);
-			}else {
+		}else {
 			SoundManager.soundVolume=volume;
 			var i=0;
 			var channel;
 			for (i=SoundManager._channels.length-1;i >=0;i--){
 				channel=SoundManager._channels[i];
-				if (channel.url !=SoundManager._tMusic){
-					channel.volume=volume;
+				if (channel !=SoundManager._musicChannel){
+					audioEngine.setVolume(channel, volume);
 				}
 			}
 		}
@@ -270,20 +279,19 @@ var SoundManager=(function(){
 
 	SoundManager.setMusicVolume=function(volume){
 		SoundManager.musicVolume=volume;
-		SoundManager._setVolume(SoundManager._tMusic,volume);
+		if (SoundManager._musicChannel) {
+			SoundManager._setVolume(SoundManager._tMusic,volume);
+		}
 	}
 
 	SoundManager._setVolume=function(url,volume){
-		url=URL.formatURL(url);
-		var i=0;
-		var channel;
-		for (i=SoundManager._channels.length-1;i >=0;i--){
-			channel=SoundManager._channels[i];
-			if (channel.url==url){
-				channel.volume=volume;
-			}
+		if (SoundManager._url2channel.has(url)) {
+			var channel = SoundManager._url2channel.get(url);
+			audioEngine.setVolume(channel, volume);
 		}
 	}
+
+	SoundManager._url2channel = new Map();
 
 	SoundManager.musicVolume=1;
 	SoundManager.soundVolume=1;
