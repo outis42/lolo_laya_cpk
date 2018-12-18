@@ -1,28 +1,56 @@
 // cocos runtime平台 SoundManager适配 begin 【添加在原SoundManager的定义之下】
 if (loadRuntime()) {
 
-function Channel(url) {
-	this.url = url;
-	this.audioId;
+function Channel(audioId) {
+    var audioEngine = loadRuntime().AudioEngine;
 
-	this.startTime;
-	this.loops;
+	this.audioId = audioId;
+	this.url;
 
-	this.volume;
-	this.audioState;
-	this.isStopped;
+	Object.defineProperty(this, "completeHandler", {
+		set : function(newValue) {
+			if (newValue) {
+				audioEngine.setFinishCallBack(this.audioId, newValue);
+			}
+		}
+	});
+	
+	Object.defineProperty(this, "volume", {
+        set : function(newValue) {
+            audioEngine.setVolume(this.audioId, newValue);
+        }
+	});
+
+    // audioEngine.AudioState: ERROR / INITIALZING / PLAYING / PAUSED / STOPPED
+	Object.defineProperty(this, "audioState", {
+		get : function() {
+            var state = audioEngine.getState(this.audioId);
+            return state
+		}
+	});
+
+	Object.defineProperty(this, "isStopped", {
+		get : function() {
+            return (this.audioState == audioEngine.AudioState.STOPPED);
+		}
+	});
 }
 
 Channel.prototype = {
 	constructor : Channel,
 	pause : function() {
-
+		if (this.audioState != audioEngine.AudioState.STOPPED &&
+			this.audioState != audioEngine.AudioState.PAUSED) {
+			loadRuntime().AudioEngine.pause(this.audioId);
+		}
 	},
 	resume : function() {
-
+		if (this.audioState == audioEngine.AudioState.PAUSED) {
+			loadRuntime().AudioEngine.resume(this.audioId);
+		}
 	},
 	stop : function() {
-
+        loadRuntime().AudioEngine.stop(this.audioId);
 	}
 }
 
@@ -87,9 +115,9 @@ SoundManager=(function(){
 		},function(value){
 		if (value==SoundManager._musicMuted)return;
 		if (value){
-			if (SoundManager._tMusic && SoundManager._musicChannel){
-				if (loadRuntime().AudioEngine.getState(SoundManager._musicChannel == loadRuntime().AudioEngine.AudioState.PLAYING)){
-					loadRuntime().AudioEngine.pause(SoundManager._musicChannel);
+			if (SoundManager._tMusic){
+				if (SoundManager._musicChannel&&!SoundManager._musicChannel.isStopped){
+					SoundManager._musicChannel.pause();
 				}else{
 					SoundManager._musicChannel=null;
 				}
@@ -101,7 +129,7 @@ SoundManager=(function(){
 			SoundManager._musicMuted=value;
 			if (SoundManager._tMusic){
 				if (SoundManager._musicChannel){
-					loadRuntime().AudioEngine.resume(SoundManager._musicChannel);
+					SoundManager._musicChannel.resume();
 				}
 			}
 		}
@@ -116,7 +144,6 @@ SoundManager=(function(){
 		SoundManager._soundMuted=value;
 	});
 
-    // 原本的channel代表一个可以播放的声音对象，现在的channel只是一个audioId
 	SoundManager.addChannel=function(channel){
 		if (SoundManager._channels.indexOf(channel)>=0)return;
 		SoundManager._channels.push(channel);
@@ -133,12 +160,10 @@ SoundManager=(function(){
 
     // 用于清理不再使用的声音资源
 	SoundManager.disposeSoundIfNotUsed=function(url){
-		if (SoundManager._url2channel.has(url)) {
-			var channel = SoundManager._url2channel.get(url);
-			for (i=SoundManager._channels.length-1;i >=0;i--){
-				if (SoundManager._channels[i]==channel){
-					return;
-				}
+		var i=0;
+		for (i=SoundManager._channels.length-1;i >=0;i--){
+			if (SoundManager._channels[i].url==url){
+				return;
 			}
 		}
 		SoundManager.destroySound(url);
@@ -155,11 +180,10 @@ SoundManager=(function(){
 	SoundManager._stageOnBlur=function(){
 		SoundManager._isActive=false;
 		if (SoundManager._musicChannel){
-            var musicState = loadRuntime().AudioEngine.getState(SoundManager._musicChannel);
-            if (musicState == loadRuntime().AudioEngine.AudioState.PLAYING) {
-            	SoundManager._blurPaused=true;
-            	loadRuntime().AudioEngine.pause(SoundManager._musicChannel);
-            }
+			if (!SoundManager._musicChannel.isStopped){
+				SoundManager._blurPaused=true;
+				SoundManager._musicChannel.pause();
+			}
 		}
 		SoundManager.stopAllSound();
 		Laya.stage.once(/*laya.events.Event.MOUSE_DOWN*/"mousedown",null,SoundManager._stageOnFocus);
@@ -169,13 +193,10 @@ SoundManager=(function(){
 		SoundManager._isActive=true;
 		Laya.stage.off(/*laya.events.Event.MOUSE_DOWN*/"mousedown",null,SoundManager._stageOnFocus);
 		if (SoundManager._blurPaused){
-			if (SoundManager._musicChannel){
-				var musicState = loadRuntime().AudioEngine.getState(SoundManager._musicChannel);
-				if (musicState == loadRuntime().AudioEngine.AudioState.PAUSED) {
-					loadRuntime().AudioEngine.resume(SoundManager._musicChannel);
-				}
+			if (SoundManager._musicChannel && SoundManager._musicChannel.isStopped){
+				SoundManager._blurPaused=false;
+				SoundManager._musicChannel.resume();
 			}
-			SoundManager._blurPaused=false;
 		}
 	}
 
@@ -193,23 +214,18 @@ SoundManager=(function(){
 			if (SoundManager._soundMuted)return null;
 		};
 		
-		// 还未实现指定次数的循环播放功能
 		var channel;
 		var volume=(url==SoundManager._tMusic)? SoundManager.musicVolume :SoundManager.soundVolume;
 		if (url.startsWith('file://')) {
 			url = url.substr('file://'.length);
 		}
-		channel=loadRuntime().AudioEngine.play(url, loops, volume);
-		var success = loadRuntime().AudioEngine.setCurrentTime(channel, startTime);
-		if (!success) {
+		var audioId = loadRuntime().AudioEngine.play(url, loops, volume);
+		loadRuntime().AudioEngine.setCurrentTime(audioId, startTime);
+		if (audioId == -1) return null;
 
-		}
-		if (!channel)return null;
-		if (complete) {
-			loadRuntime().AudioEngine.setFinishCallback(channel, complete);
-		}
-		
-        SoundManager._url2channel.set(url, channel);
+        var channel = new Channel(audioId);
+        channel.url = url;
+        channel.completeHandler = complete;
 
 		return channel;
 	}
@@ -217,6 +233,7 @@ SoundManager=(function(){
 	SoundManager.destroySound=function(url){
 		//此处应该相当于SoundManager.stopSound，并且回收相关资源。
 		SoundManager.stopSound(url);
+		loadRuntime().AudioEngine.uncache(url);
 	}
 
 	SoundManager.playMusic=function(url,loops,complete,startTime){
@@ -224,37 +241,30 @@ SoundManager=(function(){
 		(startTime===void 0)&& (startTime=0);
 		url=URL.formatURL(url);
 		SoundManager._tMusic=url;
-		if (SoundManager._musicChannel) {
-			loadRuntime().AudioEngine.stop(SoundManager._musicChannel);
-		}
-		SoundManager._musicChannel = SoundManager.playSound(url,loops,complete,loops,startTime);
-
-		return SoundManager._musicChannel;
+		if (SoundManager._musicChannel)SoundManager._musicChannel.stop();
+		return SoundManager._musicChannel=SoundManager.playSound(url,loops,complete,SoundManager._musicClass,startTime);
 	}
 
 	SoundManager.stopSound=function(url){
 		url=URL.formatURL(url);
-
-		if (SoundManager._url2channel.has(url)) {
-			var channel = SoundManager._url2channel.get(url);
-			loadRuntime().AudioEngine.stop(channel);
-
-			//如果停止的是背景音乐的处理
-			if (SoundManager._tMusic == url) {
-				SoundManager._tMusic = null;
-				SoundManager._musicChannel = null;
+		var i=0;
+		var channel;
+		for (i=SoundManager._channels.length-1;i >=0;i--){
+			channel=SoundManager._channels[i];
+			if (channel.url==url){
+				channel.stop();
 			}
-
-			SoundManager._url2channel.delete(url);
 		}
 	}
 
 	SoundManager.stopAll=function(){
-		SoundManager._tMusic = null;
-		SoundManager._musicChannel = null;
-        SoundManager._url2channel.clear();
-
-		loadRuntime().AudioEngine.stopAll();
+		SoundManager._tMusic=null;
+		var i=0;
+		var channel;
+		for (i=SoundManager._channels.length-1;i >=0;i--){
+			channel=SoundManager._channels[i];
+			channel.stop();
+		}
 	}
 
 
@@ -263,18 +273,15 @@ SoundManager=(function(){
 		var channel;
 		for (i=SoundManager._channels.length-1;i >=0;i--){
 			channel=SoundManager._channels[i];
-			if (channel !=SoundManager._musicChannel){
-				loadRuntime().AudioEngine.stop(channel);
+			if (channel.url != SoundManager._tMusic){
+				channel.stop();
 			}
 		}
 	}
 
 	SoundManager.stopMusic=function(){
-		if (SoundManager._musicChannel){
-            loadRuntime().AudioEngine.stop(SoundManager._musicChannel);
-		}
-		SoundManager._tMusic = null;
-		SoundManager._musicChannel = null;
+		if (SoundManager._musicChannel)SoundManager._musicChannel.stop();
+		SoundManager._tMusic=null;
 	}
 
 	SoundManager.setSoundVolume=function(volume,url){
@@ -287,8 +294,8 @@ SoundManager=(function(){
 			var channel;
 			for (i=SoundManager._channels.length-1;i >=0;i--){
 				channel=SoundManager._channels[i];
-				if (channel !=SoundManager._musicChannel){
-					loadRuntime().AudioEngine.setVolume(channel, volume);
+				if (channel.url !=SoundManager._tMusic){
+					channel.volume=volume;
 				}
 			}
 		}
@@ -296,19 +303,20 @@ SoundManager=(function(){
 
 	SoundManager.setMusicVolume=function(volume){
 		SoundManager.musicVolume=volume;
-		if (SoundManager._musicChannel) {
-			SoundManager._setVolume(SoundManager._tMusic,volume);
-		}
+		SoundManager._setVolume(SoundManager._tMusic,volume);
 	}
 
 	SoundManager._setVolume=function(url,volume){
-		if (SoundManager._url2channel.has(url)) {
-			var channel = SoundManager._url2channel.get(url);
-			loadRuntime().AudioEngine.setVolume(channel, volume);
+		url=URL.formatURL(url);
+		var i=0;
+		var channel;
+		for (i=SoundManager._channels.length-1;i >=0;i--){
+			channel=SoundManager._channels[i];
+			if (channel.url==url){
+				channel.volume=volume;
+			}
 		}
 	}
-
-	SoundManager._url2channel = new Map();
 
 	SoundManager.musicVolume=1;
 	SoundManager.soundVolume=1;
