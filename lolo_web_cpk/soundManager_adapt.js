@@ -1,3 +1,5 @@
+// cocos runtime平台 SoundManager适配 begin 【添加在原SoundManager的定义之下】
+if (loadRuntime()) {
 
 function Channel(url) {
 	this.url = url;
@@ -24,19 +26,7 @@ Channel.prototype = {
 	}
 }
 
-
-/**
-*<code>SoundManager</code> 是一个声音管理类。提供了对背景音乐、音效的播放控制方法。
-*引擎默认有两套声音方案：WebAudio和H5Audio
-*播放音效，优先使用WebAudio播放声音，如果WebAudio不可用，则用H5Audio播放，H5Audio在部分机器上有兼容问题（比如不能混音，播放有延迟等）。
-*播放背景音乐，则使用H5Audio播放（使用WebAudio会增加特别大的内存，并且要等加载完毕后才能播放，有延迟）
-*建议背景音乐用mp3类型，音效用wav或者mp3类型（如果打包为app，音效只能用wav格式）。
-*详细教程及声音格式请参考：http://ldc.layabox.com/doc/?nav=ch-as-1-7-0
-*/
-//class laya.media.SoundManager
-var SoundManager=(function(){
-
-    
+SoundManager=(function(){
 
 	function SoundManager(){}
 	__class(SoundManager,'laya.media.SoundManager');
@@ -338,3 +328,6 @@ var SoundManager=(function(){
 	SoundManager.autoReleaseSound=true;
 	return SoundManager;
 })()
+
+
+} // cocos runtime平台 SoundManager适配 end
