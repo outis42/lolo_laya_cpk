@@ -4783,6 +4783,59 @@ var Rectangle=(function(){
 	return Rectangle;
 })()
 
+//cocos runtime 音频适配
+function Channel(audioId) {
+	var audioEngine = loadRuntime().AudioEngine;
+
+	this.audioId = audioId;
+	this.url;
+
+	Object.defineProperty(this, "completeHandler", {
+		set : function(newValue) {
+			if (newValue) {
+				audioEngine.setFinishCallBack(this.audioId, newValue);
+			}
+		}
+	});
+	
+	Object.defineProperty(this, "volume", {
+		set : function(newValue) {
+			audioEngine.setVolume(this.audioId, newValue);
+		}
+	});
+
+	// audioEngine.AudioState: ERROR / INITIALZING / PLAYING / PAUSED / STOPPED
+	Object.defineProperty(this, "audioState", {
+		get : function() {
+			var state = audioEngine.getState(this.audioId);
+			return state
+		}
+	});
+
+	Object.defineProperty(this, "isStopped", {
+		get : function() {
+			return (this.audioState == audioEngine.AudioState.STOPPED);
+		}
+	});
+}
+
+Channel.prototype = {
+	constructor : Channel,
+	pause : function() {
+		if (this.audioState != audioEngine.AudioState.STOPPED &&
+			this.audioState != audioEngine.AudioState.PAUSED) {
+			loadRuntime().AudioEngine.pause(this.audioId);
+		}
+	},
+	resume : function() {
+		if (this.audioState == audioEngine.AudioState.PAUSED) {
+			loadRuntime().AudioEngine.resume(this.audioId);
+		}
+	},
+	stop : function() {
+		loadRuntime().AudioEngine.stop(this.audioId);
+	}
+}
 
 /**
 *<code>SoundManager</code> 是一个声音管理类。提供了对背景音乐、音效的播放控制方法。
@@ -4981,16 +5034,6 @@ var SoundManager=(function(){
 		return channel;
 	}
 
-	//cocos runtime 适配音频播放
-	var layaSoundManagerPlaySound = SoundManager.playSound;
-	SoundManager.playSound = function(url, loops, complete, soundClass, startTime) {
-		if (window.jsb) {
-            loadRuntime().AudioEngine.play(url, loops, 100);
-		} else {
-            layaSoundManagerPlaySound(url, loops, complete, soundClass, startTime);
-		}
-	}
-
 	SoundManager.destroySound=function(url){
 		var tSound=Laya.loader.getRes(url);
 		if (tSound){
@@ -4999,6 +5042,46 @@ var SoundManager=(function(){
 		}
 	}
 
+	//cocos runtime 屏幕音频
+	if (loadRuntime()) {
+		//soundClass 不再需要，使用loadRuntime().AudioEngine创建播放声音
+	    SoundManager.playSound=function(url,loops,complete,soundClass,startTime){
+			(loops===void 0)&& (loops=1);
+			(startTime===void 0)&& (startTime=0);
+			if (!SoundManager._isActive || !url)return null;
+			if (SoundManager._muted)return null;
+			
+			url=URL.formatURL(url);
+			if (url==SoundManager._tMusic){
+				if (SoundManager._musicMuted)return null;
+			}else {
+				if (SoundManager._soundMuted)return null;
+			};
+			
+			var channel;
+			var volume=(url==SoundManager._tMusic)? SoundManager.musicVolume :SoundManager.soundVolume;
+			if (url.startsWith('file://')) {
+				url = url.substr('file://'.length);
+			}
+			var audioId = loadRuntime().AudioEngine.play(url, loops, volume);
+			loadRuntime().AudioEngine.setCurrentTime(audioId, startTime);
+			if (audioId == -1) return null;
+
+			var channel = new Channel(audioId);
+			channel.url = url;
+			channel.completeHandler = complete;
+
+			return channel;
+		}
+
+        //此处应该相当于SoundManager.stopSound，并且回收相关资源。
+		SoundManager.destroySound=function(url){
+			SoundManager.stopSound(url);
+			loadRuntime().AudioEngine.uncache(url);
+		}
+	}
+
+
 	SoundManager.playMusic=function(url,loops,complete,startTime){
 		(loops===void 0)&& (loops=0);
 		(startTime===void 0)&& (startTime=0);
@@ -5006,16 +5089,6 @@ var SoundManager=(function(){
 		SoundManager._tMusic=url;
 		if (SoundManager._musicChannel)SoundManager._musicChannel.stop();
 		return SoundManager._musicChannel=SoundManager.playSound(url,loops,complete,SoundManager._musicClass,startTime);
-	}
-
-	//cocos runtime 适配音频播放
-	var layaSoundManagerPlayMusic = SoundManager.playMusic;
-	SoundManager.playMusic = function(url, loop, complete, startTime) {
-		if (window.jsb) {
-			loadRuntime().AudioEngine.play(url, true, 100);
-		} else {
-			layaSoundManagerPlayMusic(url, loop, complete, startTime);
-		}
 	}
 
 	SoundManager.stopSound=function(url){
@@ -5040,17 +5113,6 @@ var SoundManager=(function(){
 		}
 	}
 
-	//cocos runtime 适配音频播放
-	var layaSoundManagerStopAll = SoundManager.stopAll;
-	SoundManager.stopAll = function() {
-		if (window.jsb) {
-            loadRuntime().AudioEngine.stopAll();
-		} else {
-			layaSoundManagerStopAll();
-		}
-	}
-
-
 	SoundManager.stopAllSound=function(){
 		var i=0;
 		var channel;
@@ -5065,16 +5127,6 @@ var SoundManager=(function(){
 	SoundManager.stopMusic=function(){
 		if (SoundManager._musicChannel)SoundManager._musicChannel.stop();
 		SoundManager._tMusic=null;
-	}
-
-	//cocos runtime 适配音频播放
-	var layaSoundManagerStopMusic = SoundManager.stopMusic;
-	SoundManager.stopMusic = function() {
-		if (window.jsb) {
-            loadRuntime().AudioEngine.stopAll();
-		} else {
-            layaSoundManagerStopMusic();
-		}
 	}
 
 	SoundManager.setSoundVolume=function(volume,url){
@@ -5423,7 +5475,7 @@ var URL=(function(){
 		}
 
 		//cocos runtime 文件系统适配
-		if (window.jsb) {
+		if (loadRuntime()) {
 			return (base || "file://") + url;
 		} else {
 			return (base || URL.basePath) + url;
@@ -12730,7 +12782,7 @@ var Loader=(function(_super){
 		if (type==="ttf")return this._loadTTF(url);
 
         //cocos runtime 文件系统适配
-		if (window.jsb && url.startsWith('file://')) {
+		if (loadRuntime() && url.startsWith('file://')) {
 			setTimeout( ()=> {
 				url = url.substr('file://'.length);
 				
@@ -18510,7 +18562,7 @@ var Stage=(function(_super){
 				break ;
 			case "showall":
 			    //cocos runtime 屏幕适配
-			    if (window.jsb) {
+			    if (loadRuntime()) {
 			    	
 			    } else {
 			    	scaleX=scaleY=Math.min(scaleX,scaleY);
